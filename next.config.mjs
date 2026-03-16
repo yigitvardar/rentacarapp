@@ -9,7 +9,7 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ["@prisma/client", "bcryptjs", "iyzipay"],
+    serverComponentsExternalPackages: ["@prisma/client", "bcryptjs"],
   },
 };
 
