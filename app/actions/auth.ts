@@ -3,8 +3,6 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { signIn } from "@/lib/auth";
-import { AuthError } from "next-auth";
 
 // ============================================================
 // VALIDASYON ŞEMALARI
@@ -31,11 +29,6 @@ const registerSchema = z
     path: ["confirmPassword"],
   });
 
-const loginSchema = z.object({
-  email: z.string().email("Geçerli bir e-posta girin"),
-  password: z.string().min(1, "Şifre giriniz"),
-});
-
 // ============================================================
 // KAYIT SERVER ACTION
 // ============================================================
@@ -50,56 +43,60 @@ export async function registerAction(
   _prevState: RegisterState,
   formData: FormData
 ): Promise<RegisterState> {
-  const raw = {
-    name: formData.get("name") as string,
-    email: formData.get("email") as string,
-    phone: formData.get("phone") as string,
-    password: formData.get("password") as string,
-    confirmPassword: formData.get("confirmPassword") as string,
-  };
+  try {
+    const raw = {
+      name: formData.get("name") as string,
+      email: formData.get("email") as string,
+      phone: formData.get("phone") as string,
+      password: formData.get("password") as string,
+      confirmPassword: formData.get("confirmPassword") as string,
+    };
 
-  // Validasyon
-  const parsed = registerSchema.safeParse(raw);
-  if (!parsed.success) {
+    const parsed = registerSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        success: false,
+        errors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      };
+    }
+
+    const { name, email, phone, password } = parsed.data;
+
+    const existing = await db.user.findUnique({ where: { email } });
+    if (existing) {
+      return {
+        success: false,
+        errors: { email: ["Bu e-posta adresi zaten kullanılıyor"] },
+      };
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    await db.user.create({
+      data: {
+        name,
+        email,
+        phone: phone || null,
+        password: hashedPassword,
+        role: "USER",
+      },
+    });
+
+    return {
+      success: true,
+      message: "Hesabınız oluşturuldu! Giriş yapabilirsiniz.",
+    };
+  } catch (error) {
+    console.error("Register error:", error);
     return {
       success: false,
-      errors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      message: "Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.",
     };
   }
-
-  const { name, email, phone, password } = parsed.data;
-
-  // E-posta kontrolü
-  const existing = await db.user.findUnique({ where: { email } });
-  if (existing) {
-    return {
-      success: false,
-      errors: { email: ["Bu e-posta adresi zaten kullanılıyor"] },
-    };
-  }
-
-  // Şifreyi hashle
-  const hashedPassword = await bcrypt.hash(password, 12);
-
-  // Kullanıcıyı oluştur
-  await db.user.create({
-    data: {
-      name,
-      email,
-      phone: phone || null,
-      password: hashedPassword,
-      role: "USER",
-    },
-  });
-
-  return {
-    success: true,
-    message: "Hesabınız oluşturuldu! Giriş yapabilirsiniz.",
-  };
 }
 
 // ============================================================
-// GİRİŞ SERVER ACTION
+// KİMLİK DOĞRULAMA — Client-side signIn için şifre kontrolü
 // ============================================================
 
 export type LoginState = {
@@ -108,47 +105,61 @@ export type LoginState = {
   errors?: Record<string, string[]>;
 };
 
-export async function loginAction(
+const loginSchema = z.object({
+  email: z.string().email("Geçerli bir e-posta girin"),
+  password: z.string().min(1, "Şifre giriniz"),
+});
+
+// Sadece kimlik doğrulama yapar, oturum açmaz
+// Oturum açma client-side next-auth/react signIn ile yapılır
+export async function verifyCredentialsAction(
   _prevState: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const raw = {
-    email: formData.get("email") as string,
-    password: formData.get("password") as string,
-  };
-
-  // Validasyon
-  const parsed = loginSchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      success: false,
-      errors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
-    };
-  }
-
   try {
-    await signIn("credentials", {
-      email: parsed.data.email,
-      password: parsed.data.password,
-      redirect: false,
+    const raw = {
+      email: formData.get("email") as string,
+      password: formData.get("password") as string,
+    };
+
+    const parsed = loginSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        success: false,
+        errors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      };
+    }
+
+    const user = await db.user.findUnique({
+      where: { email: parsed.data.email },
+      select: { id: true, password: true },
     });
 
-    return { success: true };
-  } catch (error) {
-    if (error instanceof AuthError) {
-      switch (error.type) {
-        case "CredentialsSignin":
-          return {
-            success: false,
-            errors: { email: ["E-posta veya şifre hatalı"] },
-          };
-        default:
-          return {
-            success: false,
-            message: "Giriş sırasında bir hata oluştu",
-          };
-      }
+    if (!user || !user.password) {
+      return {
+        success: false,
+        errors: { email: ["E-posta veya şifre hatalı"] },
+      };
     }
-    throw error;
+
+    const isValid = await bcrypt.compare(parsed.data.password, user.password);
+    if (!isValid) {
+      return {
+        success: false,
+        errors: { email: ["E-posta veya şifre hatalı"] },
+      };
+    }
+
+    // Başarılı — client signIn için email'i döndür
+    return {
+      success: true,
+      message: parsed.data.email,
+    };
+  } catch (error) {
+    console.error("Login verify error:", error);
+    return {
+      success: false,
+      message: "Giriş sırasında bir hata oluştu. Lütfen tekrar deneyin.",
+    };
   }
 }
