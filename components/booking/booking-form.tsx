@@ -3,10 +3,10 @@
 import { useEffect, useRef } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { CreditCard, Calendar, AlertCircle } from "lucide-react";
+import { CreditCard, Calendar, AlertCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { createBookingAction, type BookingState } from "@/app/actions/booking";
 
 const initialState: BookingState = { success: false };
@@ -16,7 +16,7 @@ function SubmitButton() {
   return (
     <Button type="submit" size="lg" className="w-full" loading={pending}>
       {!pending && <CreditCard className="h-4 w-4" />}
-      Ödemeye Geç
+      {pending ? "Hazırlanıyor..." : "Ödemeye Geç"}
     </Button>
   );
 }
@@ -25,20 +25,13 @@ interface BookingFormProps {
   packageId: string;
   vehicleId: string;
   durationDays: number;
-  maxDate: string; // poliçe bitiş tarihi
+  maxDate: string;
 }
 
-export function BookingForm({
-  packageId,
-  vehicleId,
-  durationDays,
-  maxDate,
-}: BookingFormProps) {
+export function BookingForm({ packageId, vehicleId, durationDays, maxDate }: BookingFormProps) {
   const [state, action] = useFormState(createBookingAction, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
   const iframeRef = useRef<HTMLDivElement>(null);
 
-  // Minimum tarih: bugün
   const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
@@ -47,10 +40,16 @@ export function BookingForm({
       return;
     }
 
-    // İyzico embed form varsa DOM'a ekle
+    // İyzico ödeme sayfasına yönlendir (client-side)
+    if (state.paymentPageUrl) {
+      toast.loading("İyzico ödeme sayfasına yönlendiriliyorsunuz...");
+      window.location.href = state.paymentPageUrl;
+      return;
+    }
+
+    // Embed form varsa DOM'a ekle
     if (state.checkoutFormContent && iframeRef.current) {
       iframeRef.current.innerHTML = state.checkoutFormContent;
-      // Script'leri çalıştır
       iframeRef.current.querySelectorAll("script").forEach((oldScript) => {
         const newScript = document.createElement("script");
         Array.from(oldScript.attributes).forEach((attr) =>
@@ -64,8 +63,7 @@ export function BookingForm({
 
   return (
     <div className="space-y-6">
-      <form ref={formRef} action={action} className="space-y-4">
-        {/* Gizli alanlar */}
+      <form action={action} className="space-y-4">
         <input type="hidden" name="packageId" value={packageId} />
         <input type="hidden" name="vehicleId" value={vehicleId} />
 
@@ -80,13 +78,12 @@ export function BookingForm({
             name="startDate"
             type="date"
             min={today}
-            max={maxDate}
+            max={maxDate || undefined}
             required
             error={state.errors?.startDate?.[0]}
           />
           <p className="text-xs text-muted-foreground">
-            Süre: <strong>{durationDays} gün</strong> — Bitiş tarihi
-            otomatik hesaplanır
+            Süre: <strong>{durationDays} gün</strong> — Bitiş tarihi otomatik hesaplanır
           </p>
         </div>
 
@@ -100,12 +97,13 @@ export function BookingForm({
 
         <SubmitButton />
 
-        <p className="text-xs text-center text-muted-foreground">
-          Ödeme İyzico güvencesiyle 3D Secure ile gerçekleştirilir.
+        <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
+          <ExternalLink className="h-3 w-3" />
+          İyzico güvencesiyle 3D Secure ödeme
         </p>
       </form>
 
-      {/* İyzico embed form alanı */}
+      {/* İyzico embed form */}
       {state.success && state.checkoutFormContent && (
         <div className="border rounded-xl overflow-hidden">
           <div ref={iframeRef} id="iyzipay-checkout-form" />
