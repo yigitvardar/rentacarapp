@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Car, LayoutDashboard, User, LogOut } from "lucide-react";
+import { Car, LayoutDashboard, User, LogOut, Shield } from "lucide-react";
 import { signOut } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -38,6 +38,20 @@ export default async function DashboardLayout({
           >
             <LayoutDashboard className="h-4 w-4" />
             Dashboard
+          </Link>
+          <Link
+            href="/tc-verify"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+          >
+            <Shield className="h-4 w-4" />
+            Poliçe Sorgula
+          </Link>
+          <Link
+            href="/packages"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
+          >
+            <Car className="h-4 w-4" />
+            Araçlar & Paketler
           </Link>
           <Link
             href="/profile"
