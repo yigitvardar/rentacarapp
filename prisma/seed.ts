@@ -9,11 +9,11 @@ async function main() {
   // Admin kullanıcısı
   const adminPassword = await bcrypt.hash("admin", 12);
   const admin = await prisma.user.upsert({
-    where: { email: "yigitvardar00@gmail.com" },
+    where: { email: "admin@rentacar.com" },
     update: { password: adminPassword, role: "ADMIN" },
     create: {
       name: "Yiğit Vardar",
-      email: "yigitvardar00@gmail.com",
+      email: "admin@rentacar.com",
       password: adminPassword,
       role: "ADMIN",
     },
@@ -295,7 +295,7 @@ async function main() {
   console.log(`${packageData.length} paket oluşturuldu.`);
 
   console.log("\n✅ Seed tamamlandı!");
-  console.log("Admin  : yigitvardar00@gmail.com / admin");
+  console.log("Admin  : admin@rentacar.com / admin");
   console.log("Test   : deneme@deneme.com / 123Deneme");
 }
 
