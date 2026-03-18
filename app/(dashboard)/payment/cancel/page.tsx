@@ -13,12 +13,13 @@ const cancelReasons: Record<string, string> = {
   error: "Beklenmeyen bir hata oluştu.",
 };
 
-export default function PaymentCancelPage({
+export default async function PaymentCancelPage({
   searchParams,
 }: {
-  searchParams: { reason?: string };
+  searchParams: Promise<{ reason?: string }>;
 }) {
-  const reason = searchParams.reason ?? "payment_failed";
+  const { reason: reasonParam } = await searchParams;
+  const reason = reasonParam ?? "payment_failed";
   const message = cancelReasons[reason] ?? decodeURIComponent(reason);
 
   return (

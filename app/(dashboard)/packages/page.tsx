@@ -2,11 +2,11 @@ import { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Shield, AlertCircle, ArrowRight, Package } from "lucide-react";
+import { Shield, AlertCircle, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PackageCard } from "@/components/packages/package-card";
+import { PackageFilter } from "@/components/packages/package-filter";
 import { getPackagesForUser } from "@/lib/packages";
 import { formatDate } from "@/lib/utils";
 import { coverageTypeLabels } from "@/lib/insurance";
@@ -84,45 +84,11 @@ export default async function PackagesPage() {
         </CardContent>
       </Card>
 
-      {/* Paket Sayısı */}
-      <div className="flex items-center justify-between">
-        <p className="text-muted-foreground text-sm">
-          <span className="font-semibold text-foreground">{packages.length}</span> paket
-          listeleniyor
-        </p>
-        <div className="flex gap-2">
-          {allowedCategories.map((cat) => (
-            <Badge key={cat} variant="secondary">
-              {cat}
-            </Badge>
-          ))}
-        </div>
-      </div>
-
-      {/* Paket Listesi */}
-      {packages.length === 0 ? (
-        <div className="text-center py-16 space-y-4">
-          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto">
-            <Package className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <div>
-            <p className="font-semibold">Uygun paket bulunamadı</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Poliçenizin kapsamında şu an aktif paket bulunmuyor.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {packages.map((pkg, i) => (
-            <PackageCard
-              key={pkg.id}
-              pkg={pkg}
-              featured={i === 1 && packages.length >= 3}
-            />
-          ))}
-        </div>
-      )}
+      {/* Filtreli Paket Listesi */}
+      <PackageFilter
+        packages={packages}
+        categories={Array.from(new Set(packages.map((p) => p.category?.name).filter(Boolean) as string[]))}
+      />
     </div>
   );
 }

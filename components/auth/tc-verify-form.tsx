@@ -39,14 +39,19 @@ export function TcVerifyForm() {
   const [tcValue, setTcValue] = useState("");
 
   useEffect(() => {
-    if (!state.success) return;
+    if (state === initialState) return;
+
+    if (!state.success) {
+      if (state.message) toast.error(state.message);
+      return;
+    }
 
     if (state.policyStatus === "ACTIVE") {
       toast.success("Poliçe doğrulandı!", { description: state.message });
     } else if (state.policyStatus === "EXPIRED") {
       toast.warning("Poliçe süresi dolmuş", { description: state.message });
     } else {
-      toast.error("Poliçe bulunamadı", { description: state.message });
+      toast.info("Poliçe bulunamadı", { description: state.message });
     }
   }, [state]);
 

@@ -71,7 +71,38 @@ export async function createBookingAction(
     const start = new Date(startDate);
     const end = new Date(start);
     end.setDate(end.getDate() + pkg.durationDays);
-    const totalPrice = Number(pkg.finalPrice);
+
+    // Çakışan kiralama kontrolü
+    const conflict = await db.rental.findFirst({
+      where: {
+        vehicleId,
+        status: { in: ["PENDING", "CONFIRMED", "ACTIVE"] },
+        startDate: { lt: end },
+        endDate: { gt: start },
+      },
+    });
+    if (conflict) {
+      return { success: false, message: "Bu araç seçilen tarihler arasında müsait değil. Lütfen farklı tarih veya araç seçin." };
+    }
+    // İndirim kodu kontrolü
+    const discountCodeStr = (formData.get("discountCode") as string | null)?.toUpperCase().trim() || null;
+    let totalPrice = Number(pkg.finalPrice);
+    let discountAmount = 0;
+
+    if (discountCodeStr) {
+      const discountRecord = await db.discountCode.findUnique({ where: { code: discountCodeStr } });
+      if (
+        discountRecord &&
+        discountRecord.isActive &&
+        (!discountRecord.expiresAt || discountRecord.expiresAt > new Date()) &&
+        (!discountRecord.maxUses || discountRecord.usedCount < discountRecord.maxUses)
+      ) {
+        discountAmount = Math.round(totalPrice * Number(discountRecord.discountPercent) / 100);
+        totalPrice = totalPrice - discountAmount;
+        // Kullanım sayısını artır
+        await db.discountCode.update({ where: { code: discountCodeStr }, data: { usedCount: { increment: 1 } } });
+      }
+    }
 
     // Kiralama ve ödeme kaydı oluştur
     const rental = await db.rental.create({
@@ -85,6 +116,7 @@ export async function createBookingAction(
         totalDays: pkg.durationDays,
         totalPrice,
         status: "PENDING",
+        ...(discountCodeStr && discountAmount > 0 ? { discountCode: discountCodeStr, discountAmount } : {}),
       },
     });
 
@@ -98,13 +130,11 @@ export async function createBookingAction(
     });
 
     // IP ve callback URL
-    const headersList = headers();
+    const headersList = await headers();
     const ip = headersList.get("x-forwarded-for")?.split(",")[0].trim() ?? "127.0.0.1";
-    const appUrl =
-      process.env.NEXTAUTH_URL ??
-      process.env.NEXT_PUBLIC_APP_URL ??
-      "http://localhost:3000";
-    const callbackUrl = `${appUrl}/api/payment/callback`;
+    const host = headersList.get("x-forwarded-host") ?? headersList.get("host") ?? "localhost:3000";
+    const proto = headersList.get("x-forwarded-proto")?.split(",")[0].trim() ?? "http";
+    const callbackUrl = `${proto}://${host}/api/payment/callback`;
 
     const nameParts = (user.name ?? "Ad Soyad").trim().split(" ");
     const firstName = nameParts[0];

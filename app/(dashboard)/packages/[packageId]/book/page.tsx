@@ -9,7 +9,6 @@ import {
   Gauge,
   Shield,
   CreditCard,
-  CheckCircle,
 } from "lucide-react";
 import {
   Card,
@@ -17,12 +16,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BookingForm } from "@/components/booking/booking-form";
 import { db } from "@/lib/db";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Rezervasyon Özeti" };
 
@@ -30,19 +28,20 @@ export default async function BookPage({
   params,
   searchParams,
 }: {
-  params: { packageId: string };
-  searchParams: { vehicleId?: string };
+  params: Promise<{ packageId: string }>;
+  searchParams: Promise<{ vehicleId?: string }>;
 }) {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const vehicleId = searchParams.vehicleId;
-  if (!vehicleId) redirect(`/packages/${params.packageId}`);
+  const { packageId } = await params;
+  const { vehicleId } = await searchParams;
+  if (!vehicleId) redirect(`/packages/${packageId}`);
 
   // Tüm verileri paralel çek
   const [pkg, vehicle, tcVerification] = await Promise.all([
     db.rentalPackage.findUnique({
-      where: { id: params.packageId },
+      where: { id: packageId },
       include: { category: true },
     }),
     db.vehicle.findUnique({
@@ -79,7 +78,7 @@ export default async function BookPage({
       {/* Geri */}
       <div>
         <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4">
-          <Link href={`/packages/${params.packageId}`}>
+          <Link href={`/packages/${packageId}`}>
             <ArrowLeft className="h-4 w-4" />
             Araç Seçimine Dön
           </Link>
@@ -171,7 +170,7 @@ export default async function BookPage({
 
         {/* Sağ: Fiyat & Ödeme */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Fiyat Özeti */}
+          {/* Fiyat Özeti + Form */}
           <Card className="sticky top-6">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -179,56 +178,15 @@ export default async function BookPage({
                 Ödeme Özeti
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Paket fiyatı</span>
-                  <span>{formatCurrency(Number(pkg.basePrice))}</span>
-                </div>
-                {Number(pkg.discountRate) > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>
-                      İndirim (%{Number(pkg.discountRate).toFixed(0)})
-                    </span>
-                    <span>
-                      -{" "}
-                      {formatCurrency(
-                        Number(pkg.basePrice) - Number(pkg.finalPrice)
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="flex justify-between font-bold text-lg">
-                <span>Toplam</span>
-                <span className="text-primary">{formatCurrency(totalPrice)}</span>
-              </div>
-
-              {/* Güvenceler */}
-              <div className="space-y-1.5 text-xs text-muted-foreground">
-                {[
-                  "3D Secure ile güvenli ödeme",
-                  "İyzico ödeme güvencesi",
-                  "Sigorta kapsamında kiralama",
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              {/* Rezervasyon Formu */}
+            <CardContent>
               <BookingForm
-                packageId={params.packageId}
+                packageId={packageId}
                 vehicleId={vehicleId}
                 durationDays={pkg.durationDays}
                 maxDate={maxDate}
+                basePrice={totalPrice}
+                packageBasePrice={Number(pkg.basePrice)}
+                packageDiscountRate={Number(pkg.discountRate)}
               />
             </CardContent>
           </Card>

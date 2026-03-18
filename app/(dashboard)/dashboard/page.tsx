@@ -2,21 +2,31 @@ import { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Car, FileText, Clock, CheckCircle, Shield, ArrowRight, AlertCircle } from "lucide-react";
+import { Car, FileText, Clock, CheckCircle, Shield, ArrowRight, AlertCircle, Printer, Receipt } from "lucide-react";
+import { CancelRentalButton } from "@/components/dashboard/cancel-rental-button";
+import { ReportIssueDialog } from "@/components/dashboard/report-issue-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, rentalStatusLabels } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+const statusVariant: Record<string, "success" | "warning" | "secondary" | "destructive"> = {
+  CONFIRMED: "warning",
+  ACTIVE: "success",
+  PENDING: "warning",
+  COMPLETED: "secondary",
+  CANCELLED: "destructive",
+};
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  // TC doğrulama & kiralama istatistikleri paralel çek
-  const [tcVerification, rentals] = await Promise.all([
+  const [tcVerification, rentalStats, myRentals] = await Promise.all([
     db.tcVerification.findFirst({
       where: { userId: session.user.id },
       orderBy: { verifiedAt: "desc" },
@@ -26,12 +36,25 @@ export default async function DashboardPage() {
       where: { userId: session.user.id },
       _count: true,
     }),
+    db.rental.findMany({
+      where: {
+        userId: session.user.id,
+        status: { in: ["CONFIRMED", "ACTIVE", "COMPLETED"] },
+      },
+      include: {
+        vehicle: { include: { category: true } },
+        package: true,
+        payment: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
   ]);
 
   const rentalCounts = {
-    active: rentals.find((r) => r.status === "ACTIVE")?._count ?? 0,
-    pending: rentals.find((r) => r.status === "PENDING")?._count ?? 0,
-    completed: rentals.find((r) => r.status === "COMPLETED")?._count ?? 0,
+    active: rentalStats.find((r) => r.status === "ACTIVE")?._count ?? 0,
+    pending: rentalStats.find((r) => r.status === "CONFIRMED")?._count ?? 0,
+    completed: rentalStats.find((r) => r.status === "COMPLETED")?._count ?? 0,
   };
 
   const hasActivePolicy = tcVerification?.policyStatus === "ACTIVE";
@@ -168,6 +191,95 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Araçlarım */}
+      <div>
+        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Car className="h-5 w-5" />
+          Araçlarım
+        </h2>
+
+        {myRentals.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center">
+              <Car className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground text-sm">Henüz kiraladığınız araç yok.</p>
+              {hasActivePolicy && (
+                <Button asChild size="sm" className="mt-4">
+                  <Link href="/packages">Araç Kirala</Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {myRentals.map((rental) => (
+              <Card key={rental.id} className="overflow-hidden">
+                <CardContent className="pt-0 pb-0">
+                  <div className="flex items-center gap-4 py-4">
+                    {/* Araç İkonu */}
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <Car className="h-6 w-6 text-muted-foreground" />
+                    </div>
+
+                    {/* Ana Bilgi */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm">
+                          {rental.vehicle.brand} {rental.vehicle.model}
+                        </p>
+                        <Badge variant={statusVariant[rental.status] ?? "secondary"} className="text-xs">
+                          {rentalStatusLabels[rental.status] ?? rental.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {rental.vehicle.plate} • {rental.vehicle.category.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(rental.startDate)} – {formatDate(rental.endDate)} • {rental.totalDays} gün
+                      </p>
+                    </div>
+
+                    {/* Fiyat & Butonlar */}
+                    <div className="text-right shrink-0 space-y-2">
+                      <p className="font-semibold text-sm text-primary">
+                        {formatCurrency(Number(rental.totalPrice))}
+                      </p>
+                      {rental.status === "CONFIRMED" && (
+                        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                          <Link href={`/policy/${rental.id}`}>
+                            <Printer className="h-3 w-3" />
+                            Poliçe
+                          </Link>
+                        </Button>
+                      )}
+                      {(rental.status === "ACTIVE" || rental.status === "COMPLETED") && rental.payment?.status === "SUCCESS" && (
+                        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                          <Link href={`/invoice/${rental.id}`}>
+                            <Receipt className="h-3 w-3" />
+                            Fatura
+                          </Link>
+                        </Button>
+                      )}
+                      {rental.status === "ACTIVE" && (
+                        <ReportIssueDialog
+                          rentalId={rental.id}
+                          vehicleLabel={`${rental.vehicle.brand} ${rental.vehicle.model}`}
+                        />
+                      )}
+                      {(rental.status === "PENDING" || rental.status === "CONFIRMED") && (
+                        <CancelRentalButton rentalId={rental.id} />
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Separator />
 
       {/* Hızlı Erişim */}
       <div>

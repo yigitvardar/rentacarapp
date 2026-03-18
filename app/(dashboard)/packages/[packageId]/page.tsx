@@ -23,13 +23,14 @@ export const metadata: Metadata = { title: "Araç Seç" };
 export default async function PackageDetailPage({
   params,
 }: {
-  params: { packageId: string };
+  params: Promise<{ packageId: string }>;
 }) {
   const session = await auth();
   if (!session) redirect("/login");
 
+  const { packageId } = await params;
   const { vehicles, pkg, hasPolicy, notAllowed } =
-    await getAvailableVehiclesForPackage(params.packageId, session.user.id);
+    await getAvailableVehiclesForPackage(packageId, session.user.id);
 
   if (!pkg) notFound();
 

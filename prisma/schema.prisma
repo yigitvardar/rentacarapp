@@ -35,14 +35,17 @@ model User {
   password      String?   // bcrypt ile hashlenmiş
   phone         String?
   role          Role      @default(USER)
+  loginAttempts Int       @default(0)
+  lockedUntil   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // İlişkiler
-  sessions     Session[]
-  accounts     Account[]
+  sessions        Session[]
+  accounts        Account[]
   tcVerifications TcVerification[]
-  rentals      Rental[]
+  rentals         Rental[]
+  issueReports    IssueReport[]
 
   @@map("users")
 }
@@ -210,15 +213,52 @@ model Rental {
   totalPrice    Decimal      @db.Decimal(10, 2)
   status        RentalStatus @default(PENDING)
   notes         String?
+  discountCode  String?      // Kullanılan indirim kodu
+  discountAmount Decimal?    @db.Decimal(10, 2) // İndirim tutarı
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  user    User           @relation(fields: [userId], references: [id])
-  vehicle Vehicle        @relation(fields: [vehicleId], references: [id])
-  package RentalPackage? @relation(fields: [packageId], references: [id])
-  payment Payment?
+  user         User           @relation(fields: [userId], references: [id])
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id])
+  package      RentalPackage? @relation(fields: [packageId], references: [id])
+  payment      Payment?
+  issueReports IssueReport[]
 
   @@map("rentals")
+}
+
+// ============================================================
+// SORUN BİLDİRİMLERİ
+// ============================================================
+
+model IssueReport {
+  id        String   @id @default(cuid())
+  rentalId  String
+  userId    String
+  subject   String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  rental Rental @relation(fields: [rentalId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("issue_reports")
+}
+
+// ============================================================
+// RATE LIMITING
+// ============================================================
+
+model RateLimit {
+  id        String   @id @default(cuid())
+  key       String   @unique  // "tc-verify:userId" veya "register:ip"
+  count     Int      @default(1)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("rate_limits")
 }
 
 // ============================================================
@@ -249,4 +289,21 @@ model Payment {
   rental Rental @relation(fields: [rentalId], references: [id])
 
   @@map("payments")
+}
+
+// ============================================================
+// İNDİRİM KODU
+// ============================================================
+
+model DiscountCode {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  discountPercent Decimal   @db.Decimal(5, 2)  // % indirim
+  maxUses         Int?      // null = sınırsız
+  usedCount       Int       @default(0)
+  expiresAt       DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+
+  @@map("discount_codes")
 }

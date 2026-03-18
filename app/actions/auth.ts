@@ -3,6 +3,8 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { headers } from "next/headers";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // ============================================================
 // VALIDASYON ŞEMALARI
@@ -44,6 +46,14 @@ export async function registerAction(
   formData: FormData
 ): Promise<RegisterState> {
   try {
+    // Rate limiting: IP başına saatte 3 kayıt denemesi
+    const headersList = await headers();
+    const ip = headersList.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+    const rateLimit = await checkRateLimit(`register:${ip}`, 3, 60 * 60);
+    if (!rateLimit.allowed) {
+      return { success: false, message: "Çok fazla deneme yaptınız. Lütfen 1 saat sonra tekrar deneyin." };
+    }
+
     const raw = {
       name: formData.get("name") as string,
       email: formData.get("email") as string,
@@ -102,6 +112,7 @@ export async function registerAction(
 export type LoginState = {
   success: boolean;
   message?: string;
+  role?: string;
   errors?: Record<string, string[]>;
 };
 
@@ -132,7 +143,7 @@ export async function verifyCredentialsAction(
 
     const user = await db.user.findUnique({
       where: { email: parsed.data.email },
-      select: { id: true, password: true },
+      select: { id: true, password: true, role: true },
     });
 
     if (!user || !user.password) {
@@ -150,10 +161,11 @@ export async function verifyCredentialsAction(
       };
     }
 
-    // Başarılı — client signIn için email'i döndür
+    // Başarılı — client signIn için email ve rol döndür
     return {
       success: true,
       message: parsed.data.email,
+      role: user.role,
     };
   } catch (error) {
     console.error("Login verify error:", error);

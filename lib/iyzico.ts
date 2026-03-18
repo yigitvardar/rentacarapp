@@ -20,20 +20,26 @@ function getConfig() {
     throw new Error("İyzico API anahtarları tanımlı değil");
   }
 
-  return { apiKey, secretKey, baseUrl };
+  return { apiKey: apiKey.trim(), secretKey: secretKey.trim(), baseUrl: baseUrl.trim() };
 }
 
-// İyzico HMAC-SHA256 imza hesaplama
-function computeSignature(
+// İyzico IYZWSv2 Authorization header üret
+// Formül: HMAC-SHA256(randomString + uri + JSON.stringify(body), secretKey) → hex
+// Ardından: base64("apiKey:xxx&randomKey:xxx&signature:xxx")
+function generateAuthHeader(
+  apiKey: string,
   secretKey: string,
   randomString: string,
-  requestBody: string
+  uri: string,
+  body: object
 ): string {
-  const hash = crypto
+  const signature = crypto
     .createHmac("sha256", secretKey)
-    .update(randomString + requestBody)
-    .digest("base64");
-  return hash;
+    .update(randomString + uri + JSON.stringify(body))
+    .digest("hex");
+
+  const params = `apiKey:${apiKey}&randomKey:${randomString}&signature:${signature}`;
+  return `IYZWSv2 ${Buffer.from(params).toString("base64")}`;
 }
 
 // Tutarı İyzico formatına çevir
@@ -130,23 +136,24 @@ export async function createCheckoutForm(
     ],
   };
 
-  const bodyStr = JSON.stringify(body);
-  const signature = computeSignature(secretKey, randomString, bodyStr);
+  const uri = "/payment/iyzipos/checkoutform/initialize/auth/ecom";
+  const authHeader = generateAuthHeader(apiKey, secretKey, randomString, uri, body);
 
   try {
-    const response = await fetch(
-      `${baseUrl}/payment/iyzipos/checkoutform/initialize/auth/ecom`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `IYZWSv2 apiKey:${apiKey}&randomKey:${randomString}&signature:${signature}`,
-        },
-        body: bodyStr,
-      }
-    );
+    const response = await fetch(`${baseUrl}${uri}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+        "x-iyzi-rnd": randomString,
+        "x-iyzi-client-version": "iyzipay-node-2.0.65",
+      },
+      body: JSON.stringify(body),
+    });
 
     const result = await response.json();
+    console.log("İyzico response:", JSON.stringify(result));
 
     if (result.status === "success") {
       return {
@@ -159,13 +166,14 @@ export async function createCheckoutForm(
 
     return {
       success: false,
-      error: result.errorMessage ?? result.errorCode ?? "Bilinmeyen hata",
+      error: `[${result.errorCode}] ${result.errorMessage ?? "Bilinmeyen hata"}`,
     };
   } catch (error) {
-    console.error("İyzico API hatası:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("İyzico API hatası:", msg);
     return {
       success: false,
-      error: "İyzico bağlantı hatası",
+      error: `Bağlantı hatası: ${msg}`,
     };
   }
 }
@@ -189,21 +197,22 @@ export async function retrieveCheckoutForm(
   const { apiKey, secretKey, baseUrl } = getConfig();
 
   const randomString = Math.random().toString(36).substring(2);
-  const body = JSON.stringify({ locale: "tr", token });
-  const signature = computeSignature(secretKey, randomString, body);
+  const retrieveBody = { locale: "tr", token };
+  const retrieveUri = "/payment/iyzipos/checkoutform/auth/ecom/detail";
+  const authHeader = generateAuthHeader(apiKey, secretKey, randomString, retrieveUri, retrieveBody);
 
   try {
-    const response = await fetch(
-      `${baseUrl}/payment/iyzipos/checkoutform/auth/ecom/detail`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `IYZWSv2 apiKey:${apiKey}&randomKey:${randomString}&signature:${signature}`,
-        },
-        body,
-      }
-    );
+    const response = await fetch(`${baseUrl}${retrieveUri}`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+        "x-iyzi-rnd": randomString,
+        "x-iyzi-client-version": "iyzipay-node-2.0.65",
+      },
+      body: JSON.stringify(retrieveBody),
+    });
 
     const result = await response.json();
 

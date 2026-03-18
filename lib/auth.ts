@@ -6,17 +6,21 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import type { Role } from "@prisma/client";
 
-// Giriş formu validasyon şeması
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(1),
 });
+
+// Login başarısız denemelerini takip et (brute force koruması)
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 gün
+    maxAge: 7 * 24 * 60 * 60,    // 7 gün
+    updateAge: 24 * 60 * 60,      // 24 saatte bir token yenile
   },
   pages: {
     signIn: "/login",
@@ -44,13 +48,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             password: true,
             role: true,
             image: true,
+            loginAttempts: true,
+            lockedUntil: true,
           },
         });
 
         if (!user || !user.password) return null;
 
+        // Hesap kilitli mi?
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+          return null;
+        }
+
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) return null;
+
+        if (!isPasswordValid) {
+          const attempts = (user.loginAttempts ?? 0) + 1;
+          const locked = attempts >= MAX_LOGIN_ATTEMPTS;
+          await db.user.update({
+            where: { id: user.id },
+            data: {
+              loginAttempts: attempts,
+              ...(locked && {
+                lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000),
+              }),
+            },
+          });
+          return null;
+        }
+
+        // Başarılı giriş: sayacı sıfırla
+        await db.user.update({
+          where: { id: user.id },
+          data: { loginAttempts: 0, lockedUntil: null },
+        });
 
         return {
           id: user.id,

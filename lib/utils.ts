@@ -78,7 +78,7 @@ export function daysBetween(start: Date, end: Date): number {
 // Kiralama durumu Türkçe etiketleri
 export const rentalStatusLabels: Record<string, string> = {
   PENDING: "Beklemede",
-  CONFIRMED: "Onaylandı",
+  CONFIRMED: "Onay Bekleniyor",
   ACTIVE: "Aktif",
   COMPLETED: "Tamamlandı",
   CANCELLED: "İptal Edildi",

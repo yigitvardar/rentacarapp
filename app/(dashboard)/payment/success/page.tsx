@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle, Car, Calendar, ArrowRight, Download } from "lucide-react";
+import { CheckCircle, Car, Calendar, ArrowRight, Printer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +14,12 @@ export const metadata: Metadata = { title: "Ödeme Başarılı" };
 export default async function PaymentSuccessPage({
   searchParams,
 }: {
-  searchParams: { rentalId?: string };
+  searchParams: Promise<{ rentalId?: string }>;
 }) {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const rentalId = searchParams.rentalId;
+  const { rentalId } = await searchParams;
   if (!rentalId) redirect("/dashboard");
 
   const rental = await db.rental.findUnique({
@@ -133,9 +133,9 @@ export default async function PaymentSuccessPage({
           </Link>
         </Button>
         <Button asChild variant="outline" size="lg">
-          <Link href="/dashboard">
-            <Download className="h-4 w-4" />
-            Rezervasyon Belgesi (Yakında)
+          <Link href={`/policy/${rental.id}`}>
+            <Printer className="h-4 w-4" />
+            Poliçeyi Görüntüle &amp; Yazdır
           </Link>
         </Button>
       </div>

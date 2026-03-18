@@ -126,11 +126,12 @@ export function VehicleCard({ vehicle, packageId, durationDays }: VehicleCardPro
         </div>
       </CardContent>
 
-      <CardFooter className="pt-0">
-        <Button asChild className="w-full">
-          <Link
-            href={`/packages/${packageId}/book?vehicleId=${vehicle.id}`}
-          >
+      <CardFooter className="pt-0 flex gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/vehicles/${vehicle.id}`}>Detaylar</Link>
+        </Button>
+        <Button asChild className="flex-1">
+          <Link href={`/packages/${packageId}/book?vehicleId=${vehicle.id}`}>
             Bu Aracı Seç
           </Link>
         </Button>

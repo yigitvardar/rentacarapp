@@ -29,6 +29,7 @@ export function LoginForm() {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const [state, action] = useFormState(verifyCredentialsAction, initialState);
+  const [passwordValue, setPasswordValue] = useState("");
 
   useEffect(() => {
     if (!state.success) {
@@ -38,10 +39,11 @@ export function LoginForm() {
 
     // Kimlik doğrulandı — şimdi client-side oturum aç
     const email = state.message!;
-    const formData = document.querySelector("form");
-    const password = (formData?.querySelector("#password") as HTMLInputElement)?.value;
+    const password = passwordValue;
 
     if (!email || !password) return;
+
+    const redirectTo = state.role === "ADMIN" ? "/admin" : callbackUrl;
 
     setIsSigningIn(true);
     signIn("credentials", { email, password, redirect: false })
@@ -50,7 +52,7 @@ export function LoginForm() {
           toast.error("Giriş yapılamadı. Tekrar deneyin.");
         } else {
           toast.success("Giriş başarılı!");
-          router.push(callbackUrl);
+          router.push(redirectTo);
           router.refresh();
         }
       })
@@ -88,6 +90,8 @@ export function LoginForm() {
           type="password"
           placeholder="Şifrenizi girin"
           autoComplete="current-password"
+          value={passwordValue}
+          onChange={(e) => setPasswordValue(e.target.value)}
           error={state.errors?.password?.[0]}
         />
       </div>
